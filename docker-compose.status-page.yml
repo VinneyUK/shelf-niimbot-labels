@@ -1,0 +1,17 @@
+# Optional: serve the label status page.
+#   docker compose -f docker-compose.status-page.yml up -d
+# then open http://<this machine>:8088
+#
+# It only reads the files shelf-labels.sh writes into ./data/labels, so it
+# never talks to Shelf or Home Assistant itself and holds no secrets.
+services:
+  label-status:
+    image: caddy:2.11.4-alpine
+    container_name: shelf-label-status
+    restart: unless-stopped
+    command: caddy file-server --root /srv --listen :80
+    ports:
+      - "8088:80"
+    volumes:
+      - ./page:/srv:ro
+      - ./data/labels:/srv/data:ro

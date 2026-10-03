@@ -1,0 +1,8 @@
+# Your settings, including your Home Assistant token
+label-printer.env
+# Written by the script at run time
+/data/
+# Backups the script or you may leave behind
+*.bak
+*.bak.*
+.DS_Store

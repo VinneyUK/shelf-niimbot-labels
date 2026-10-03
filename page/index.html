@@ -1,0 +1,333 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#E4E9EF" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#1C2733" media="(prefers-color-scheme: dark)">
+<title>Label printer</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🏷️</text></svg>">
+<style>
+@font-face {
+  font-family: "Label";
+  src: url("poppins-bold.ttf") format("truetype");
+  font-weight: 700;
+  font-display: swap;
+}
+
+:root {
+  --desk: #E4E9EF;
+  --desk-edge: #CDD5DE;
+  --text: #1C2733;
+  --muted: #5B6878;
+  --paper: #FFFFFF;
+  --ink: #15181D;
+  --slot: #2A3442;
+  --printing: #2F62E8;
+  --waiting: #B87A12;
+  --fault: #C2413A;
+  --fault-bg: #F8E3E1;
+  --label-shadow: 0 1px 1px rgba(28, 39, 51, .18), 0 6px 14px -6px rgba(28, 39, 51, .28);
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --desk: #1C2733;
+    --desk-edge: #2C3A4A;
+    --text: #E6ECF2;
+    --muted: #93A1B2;
+    --slot: #0E141B;
+    --printing: #7EA2FF;
+    --waiting: #E3AE4E;
+    --fault: #FF8A80;
+    --fault-bg: #3A2427;
+    --label-shadow: 0 1px 1px rgba(0, 0, 0, .5), 0 8px 18px -8px rgba(0, 0, 0, .7);
+    color-scheme: dark;
+  }
+}
+
+* { box-sizing: border-box; }
+html { -webkit-text-size-adjust: 100%; }
+body {
+  margin: 0;
+  background: var(--desk);
+  color: var(--text);
+  font: 400 1rem/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  padding: max(1.25rem, env(safe-area-inset-top)) max(1.25rem, env(safe-area-inset-right))
+           max(2.5rem, env(safe-area-inset-bottom)) max(1.25rem, env(safe-area-inset-left));
+}
+main { max-width: 42rem; margin: 0 auto; }
+
+header { margin-bottom: 1.75rem; }
+h1 { font-size: 1.75rem; line-height: 1.15; margin: 0 0 .5rem; letter-spacing: -.01em; }
+.printer { display: flex; flex-wrap: wrap; gap: .25rem 1.25rem; color: var(--muted); font-size: .9375rem; margin: 0; padding: 0; list-style: none; }
+.printer .dot { display: inline-block; width: .55rem; height: .55rem; border-radius: 50%; margin-right: .4rem; vertical-align: .05em; background: var(--muted); }
+.printer .dot.on { background: #2E9E5B; }
+@media (prefers-color-scheme: dark) { .printer .dot.on { background: #52C985; } }
+
+.notice { border-left: 3px solid var(--fault); background: var(--fault-bg); padding: .75rem 1rem; margin: 0 0 1.75rem; border-radius: 0 6px 6px 0; }
+.notice p { margin: 0; }
+.notice p + p { margin-top: .25rem; color: var(--muted); font-size: .9375rem; }
+.notice.stale { border-color: var(--waiting); background: transparent; border-top: 1px solid var(--desk-edge); border-right: 1px solid var(--desk-edge); border-bottom: 1px solid var(--desk-edge); }
+
+section { margin-bottom: 2.25rem; }
+h2 { font-size: 1.0625rem; margin: 0 0 .875rem; display: flex; align-items: baseline; gap: .5rem; }
+h2 .count { font-weight: 600; color: var(--waiting); font-variant-numeric: tabular-nums; }
+.empty { color: var(--muted); margin: 0; max-width: 34rem; }
+
+/* ---- the label replica: same proportions and layout as the printed label.
+   --w is the label length in printer dots (from status.json); 96 dots is the printable height. */
+.label {
+  --w: 320; --ts: 20; --m: 0;
+  container-type: inline-size;
+  position: relative;
+  width: 100%;
+  max-width: calc(22rem * var(--w) / 320);
+  aspect-ratio: var(--w) / 96;
+  background: var(--paper);
+  color: var(--ink);
+  border-radius: 5px;
+  box-shadow: var(--label-shadow);
+  overflow: hidden;
+}
+.label > * { --u: calc(100cqw / var(--w)); }
+.label canvas { position: absolute; left: calc((2 + var(--m)) * var(--u)); top: calc(1 * var(--u)); width: calc(93 * var(--u)); height: calc(93 * var(--u)); image-rendering: pixelated; }
+.label .sam { position: absolute; left: calc((102 + var(--m)) * var(--u)); top: calc(4 * var(--u)); font: 700 calc(16 * var(--u))/1 "Label", system-ui, sans-serif; white-space: nowrap; }
+.label .title {
+  position: absolute; left: calc((102 + var(--m)) * var(--u)); top: calc(27 * var(--u)); right: calc(5 * var(--u));
+  font: 700 calc(var(--ts) * var(--u))/1.1 "Label", system-ui, sans-serif;
+  display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden;
+  overflow-wrap: anywhere;
+}
+
+/* ---- printing now: the label feeding out of the printer */
+.feed { max-width: 22rem; }
+.slot { height: .75rem; border-radius: 999px; background: var(--slot); box-shadow: inset 0 2px 3px rgba(0,0,0,.45); position: relative; z-index: 1; }
+.feed .window { overflow: hidden; margin: -3px .5rem 0; padding: 0 0 1rem; }
+.feed .label { max-width: none; transform-origin: top; animation: feed 3.2s cubic-bezier(.25,.7,.3,1) infinite; }
+@keyframes feed {
+  0%   { transform: translateY(-100%); }
+  70%  { transform: translateY(0); }
+  100% { transform: translateY(0); }
+}
+@media (prefers-reduced-motion: reduce) { .feed .label { animation: none; } }
+.feed + .caption { color: var(--printing); font-weight: 600; margin: .25rem 0 0; }
+
+.queue { display: grid; grid-template-columns: repeat(auto-fill, minmax(15rem, 1fr)); gap: 1rem; margin: 0; padding: 0; list-style: none; }
+.queue .label { max-width: none; }
+.queue li.failed .label { outline: 2px solid var(--fault); outline-offset: 2px; }
+
+/* ---- printed: a plain record, not more labels */
+.history { list-style: none; margin: 0; padding: 0; }
+.history li { display: grid; grid-template-columns: max-content 5.25rem 1fr auto; gap: .75rem; align-items: baseline; padding: .55rem 0; border-top: 1px solid var(--desk-edge); }
+.history li:last-child { border-bottom: 1px solid var(--desk-edge); }
+.history time { white-space: nowrap; min-width: 3.25rem; color: var(--muted); font-variant-numeric: tabular-nums; font-size: .9375rem; }
+.history .id { font-weight: 600; font-variant-numeric: tabular-nums; }
+.history .name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.history .warn { display: block; color: var(--fault); font-size: .875rem; white-space: normal; }
+a { color: var(--printing); text-underline-offset: .15em; }
+a:focus-visible, button:focus-visible { outline: 2px solid var(--printing); outline-offset: 2px; border-radius: 3px; }
+.more { margin-top: .875rem; font: inherit; color: var(--printing); background: none; border: 0; padding: .25rem 0; cursor: pointer; text-decoration: underline; text-underline-offset: .15em; }
+
+@media (max-width: 30rem) {
+  .history li { grid-template-columns: max-content 1fr auto; row-gap: 0; }
+  .history .id { grid-column: 2; }
+  .history .name { grid-column: 2 / 4; grid-row: 2; }
+  .history .open { grid-column: 3; grid-row: 1; }
+}
+.sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <h1>Label printer</h1>
+    <ul class="printer" id="printer" aria-live="polite"><li>Loading…</li></ul>
+  </header>
+
+  <div id="notices"></div>
+
+  <section aria-labelledby="h-now">
+    <h2 id="h-now">Printing now</h2>
+    <div id="now"></div>
+  </section>
+
+  <section aria-labelledby="h-waiting">
+    <h2 id="h-waiting">Waiting <span class="count" id="waiting-count"></span></h2>
+    <div id="waiting"></div>
+  </section>
+
+  <section aria-labelledby="h-printed">
+    <h2 id="h-printed">Printed</h2>
+    <div id="printed"></div>
+  </section>
+</main>
+
+<script src="qrcode.js"></script>
+<script>
+"use strict";
+const POLL_MS = 5000;
+const STALE_AFTER_S = 150;      // the script runs every minute
+const HISTORY_SHOWN = 30;
+
+let state = { status: null, history: [], statusError: null, showAll: false };
+const last = {};                // last rendered HTML per region, to avoid restarting the feed animation
+
+const $ = (id) => document.getElementById(id);
+const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+
+// The script sends the exact text it prints; older status files don't have it
+const labelTitle = (job) => job.label_title || (job.title.length > 40 ? job.title.slice(0, 39).trimEnd() + "…" : job.title);
+
+function labelHtml(job) {
+  const s = state.status || {};
+  const w = Number(s.label_width) || 320, ts = Number(s.title_size) || 20, m = Number(s.left_margin) || 0;
+  return `<div class="label" style="--w:${w};--ts:${ts};--m:${m}" role="img" aria-label="Label for ${esc(job.sam || "asset")}: ${esc(job.title)}">
+    <canvas data-qr="${esc(job.qr)}" width="31" height="31"></canvas>
+    <div class="sam">${esc(job.sam)}</div>
+    <div class="title">${esc(labelTitle({ title: "", ...job }))}</div>
+  </div>`;
+}
+
+function drawQrs(root) {
+  root.querySelectorAll("canvas[data-qr]").forEach((cv) => {
+    if (cv.dataset.drawn === cv.dataset.qr) return;
+    const qr = qrcode(0, "L");
+    qr.addData(cv.dataset.qr);
+    qr.make();
+    const n = qr.getModuleCount(), b = 1, size = n + b * 2;
+    cv.width = size; cv.height = size;
+    const ctx = cv.getContext("2d");
+    ctx.fillStyle = "#fff"; ctx.fillRect(0, 0, size, size);
+    ctx.fillStyle = "#15181D";
+    for (let r = 0; r < n; r++) for (let c = 0; c < n; c++) if (qr.isDark(r, c)) ctx.fillRect(c + b, r + b, 1, 1);
+    cv.dataset.drawn = cv.dataset.qr;
+  });
+}
+
+function setRegion(id, html) {
+  if (last[id] === html) return;
+  last[id] = html;
+  const el = $(id);
+  el.innerHTML = html;
+  drawQrs(el);
+}
+
+function ago(iso) {
+  const s = Math.max(0, Math.round((Date.now() - new Date(iso)) / 1000));
+  if (s < 60) return `${s} s ago`;
+  const m = Math.round(s / 60);
+  if (m < 60) return `${m} min ago`;
+  const h = Math.round(m / 60);
+  return h < 48 ? `${h} h ago` : `${Math.round(h / 24)} days ago`;
+}
+
+function when(iso) {
+  const d = new Date(iso), today = new Date();
+  const time = d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+  return d.toDateString() === today.toDateString() ? time : d.toLocaleDateString([], { day: "numeric", month: "short" }) + ", " + time;
+}
+
+function shelfLink(job) {
+  const base = (state.status && state.status.server_url || "").replace(/\/$/, "");
+  return base && job.asset ? `${base}/assets/${encodeURIComponent(job.asset)}` : job.qr;
+}
+
+function renderPrinter() {
+  const s = state.status;
+  if (state.statusError) return setRegion("printer", `<li>${esc(state.statusError)}</li>`);
+  if (!s) return;
+  const items = [];
+  const ents = Array.isArray(s.printer) ? s.printer : null;
+  if (!ents) {
+    items.push(`<li>Printer status unavailable: Home Assistant didn't answer</li>`);
+  } else {
+    const byClass = (dc, word) => ents.find((e) => e.device_class === dc) || ents.find((e) => (e.entity || "").includes(word));
+    const conn = byClass("connectivity", "connection");
+    const batt = byClass("battery", "battery");
+    if (conn) items.push(conn.state === "on"
+      ? `<li><span class="dot on" aria-hidden="true"></span>Connected</li>`
+      : `<li title="Unless Keep Connection is on, the integration only connects while printing"><span class="dot" aria-hidden="true"></span>Not connected right now</li>`);
+    if (batt && !isNaN(parseFloat(batt.state))) items.push(`<li>Battery ${esc(Math.round(parseFloat(batt.state)))}%</li>`);
+    const err = ents.find((e) => /last_error/.test(e.entity || ""));
+    if (err && !["unknown", "unavailable", "none", "", "ok"].includes(String(err.state).toLowerCase()))
+      items.push(`<li>Printer reports: ${esc(err.state)}</li>`);
+  }
+  items.push(`<li>Checked ${esc(ago(s.updated))}</li>`);
+  setRegion("printer", items.join(""));
+}
+
+function renderNotices() {
+  const s = state.status, out = [];
+  if (s) {
+    const age = (Date.now() - new Date(s.updated)) / 1000;
+    if (age > STALE_AFTER_S) out.push(`<div class="notice stale" role="status"><p>No update from the print script for ${esc(ago(s.updated).replace(" ago", ""))}.</p><p>Check that shelf-labels.sh is scheduled to run every minute.</p></div>`);
+    if (s.last_error) {
+      const j = s.last_error.job;
+      out.push(`<div class="notice" role="alert"><p>${j ? `Couldn't print ${esc(j.sam || j.title)}. ` : ""}${esc(s.last_error.message)}</p><p>Last tried ${esc(ago(s.last_error.at))}. It tries again every minute; the label stays in the queue until it prints.</p></div>`);
+    }
+  }
+  setRegion("notices", out.join(""));
+}
+
+function renderNow() {
+  const j = state.status && state.status.current;
+  setRegion("now", j
+    ? `<div class="feed"><div class="slot" aria-hidden="true"></div><div class="window">${labelHtml(j)}</div></div><p class="caption">Printing ${esc(j.sam || j.title)}</p>`
+    : `<p class="empty">Idle.</p>`);
+}
+
+function renderWaiting() {
+  const s = state.status, q = (s && s.queue) || [];
+  const failedAsset = s && s.last_error && s.last_error.job && s.last_error.job.asset;
+  $("waiting-count").textContent = q.length ? String(q.length) : "";
+  setRegion("waiting", q.length
+    ? `<ul class="queue">${q.map((j) => `<li class="${j.asset === failedAsset ? "failed" : ""}">${labelHtml(j)}</li>`).join("")}</ul>`
+    : `<p class="empty">Nothing waiting. Give an asset the ${esc((s && s.tag) || "QR")} tag in Shelf and its label prints within a minute.</p>`);
+}
+
+function renderPrinted() {
+  const h = state.history;
+  if (!h.length) return setRegion("printed", `<p class="empty">Nothing printed yet.</p>`);
+  const shown = state.showAll ? h : h.slice(0, HISTORY_SHOWN);
+  const rows = shown.map((e) => {
+    const j = e.job || {};
+    const warn = e.result === "tag_kept" ? `<span class="warn">Printed, but its tag couldn't be removed. Remove it in Shelf or it prints again.</span>`
+      : e.result === "no_done_tag" ? `<span class="warn">Printed, but not marked as labelled: the tag to mark it with doesn't exist in Shelf.</span>` : "";
+    return `<li><time datetime="${esc(e.at)}">${esc(when(e.at))}</time><span class="id">${esc(j.sam)}</span><span class="name">${esc(j.title)}${warn}</span><a class="open" href="${esc(shelfLink(j))}">Open<span class="sr-only"> ${esc(j.title)}</span> in Shelf</a></li>`;
+  }).join("");
+  const more = !state.showAll && h.length > HISTORY_SHOWN ? `<button class="more" type="button" id="more">Show all ${h.length}</button>` : "";
+  setRegion("printed", `<ul class="history">${rows}</ul>${more}`);
+  const btn = $("more");
+  if (btn) btn.onclick = () => { state.showAll = true; renderPrinted(); };
+}
+
+function render() {
+  renderPrinter(); renderNotices(); renderNow(); renderWaiting(); renderPrinted();
+}
+
+async function load() {
+  try {
+    const r = await fetch("data/status.json", { cache: "no-store" });
+    if (r.status === 404) { state.status = null; state.statusError = "No status yet: the print script hasn't run since this page was set up."; }
+    else if (!r.ok) throw new Error(r.status);
+    else { state.status = await r.json(); state.statusError = null; }
+  } catch (e) {
+    state.statusError = "Can't load the print status. Check the web server for this page is running.";
+  }
+  try {
+    const r = await fetch("data/history.jsonl", { cache: "no-store" });
+    if (r.ok) {
+      state.history = (await r.text()).split("\n").filter(Boolean).map((l) => { try { return JSON.parse(l); } catch { return null; } })
+        .filter(Boolean).reverse();
+    }
+  } catch (e) { /* keep the last history we had */ }
+  render();
+}
+
+load();
+setInterval(load, POLL_MS);
+document.addEventListener("visibilitychange", () => { if (!document.hidden) load(); });
+</script>
+</body>
+</html>
